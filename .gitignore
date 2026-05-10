@@ -1,6 +1,9 @@
 # Dependency directories
 node_modules/
 apps/*/node_modules/
+venv/
+.venv/
+env/
 
 # Build outputs
 .next/
@@ -9,6 +12,7 @@ build/
 out/
 .vercel/
 *.tsbuildinfo
+graphify-out/
 
 # Environment variables
 .env
