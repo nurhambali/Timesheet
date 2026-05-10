@@ -14,7 +14,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   .post(
     '/register',
     async ({ body, set }) => {
-      const { email, name, password } = body
+      const { email, name, password, role, telegramId } = body
 
       // Check if user exists
       const existingUser = await prisma.user.findUnique({
@@ -29,21 +29,29 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       // Hash password using Bun's built-in hashing
       const hashedPassword = await Bun.password.hash(password)
 
-      // Create user
-      const user = await prisma.user.create({
-        data: {
-          email,
-          name,
-          password: hashedPassword,
-          // Generate a unique token for Telegram link
-          telegramToken: crypto.randomUUID(),
-        },
-      })
+      try {
+        // Create user
+        const user = await prisma.user.create({
+          data: {
+            email,
+            name,
+            password: hashedPassword,
+            role: (role as "USER" | "ADMIN") || 'USER',
+            telegramId: telegramId && telegramId.trim() !== '' ? telegramId.replace('@', '').trim() : null,
+            // Generate a unique token for Telegram link
+            telegramToken: crypto.randomUUID(),
+          },
+        })
 
-      return {
-        success: true,
-        message: 'User registered successfully',
-        data: { id: user.id, email: user.email, name: user.name },
+        return {
+          success: true,
+          message: 'User registered successfully',
+          data: { id: user.id, email: user.email, name: user.name },
+        }
+      } catch (err: any) {
+        console.error('Register error:', err)
+        set.status = 500
+        return { success: false, message: 'Server Error: ' + err.message }
       }
     },
     {
@@ -51,6 +59,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         email: t.String({ format: 'email' }),
         name: t.String({ minLength: 2 }),
         password: t.String({ minLength: 6 }),
+        role: t.Optional(t.String()),
+        telegramId: t.Optional(t.String()),
       }),
     }
   )

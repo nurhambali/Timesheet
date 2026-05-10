@@ -7,13 +7,15 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
   .post(
     '/',
     async ({ body, user, set }) => {
-      const { project, activity, duration, date, note, source } = body
+      const { project, startTime, endTime, activity, duration, date, note, source } = body
 
       try {
         const entry = await prisma.timesheet.create({
           data: {
             userId: user!.id,
             project,
+            startTime,
+            endTime,
             activity,
             duration,
             date: new Date(date),
@@ -34,9 +36,11 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
     },
     {
       body: t.Object({
-        project: t.String({ minLength: 1 }),
+        project: t.Optional(t.String()),
+        startTime: t.Optional(t.String()),
+        endTime: t.Optional(t.String()),
         activity: t.String({ minLength: 1 }),
-        duration: t.Number({ minimum: 0.1 }),
+        duration: t.Number({ minimum: 0 }),
         date: t.String(), // ISO format
         note: t.Optional(t.String()),
         source: t.Optional(t.Enum({ WEB: 'WEB', TELEGRAM: 'TELEGRAM' })),

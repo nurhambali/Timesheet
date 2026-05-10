@@ -4,6 +4,9 @@ import { jwt } from "@elysiajs/jwt";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/user";
 import { timesheetRoutes } from "./routes/timesheet";
+import { settingsRoutes } from "./routes/settings";
+
+import { startBot } from "./lib/bot";
 
 const app = new Elysia()
   .use(cors())
@@ -17,8 +20,12 @@ const app = new Elysia()
   .use(authRoutes)
   .use(userRoutes)
   .use(timesheetRoutes)
+  .use(settingsRoutes)
   .listen(3000);
 
 console.log(
   `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
 );
+
+// Start Telegram Bot
+startBot();

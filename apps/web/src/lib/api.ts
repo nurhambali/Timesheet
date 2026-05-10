@@ -39,6 +39,13 @@ export const api = {
     })
   },
 
+  patch(path: string, body: any) {
+    return this.request(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+  },
+
   put(path: string, body: any) {
     return this.request(path, {
       method: 'PUT',

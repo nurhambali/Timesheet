@@ -27,7 +27,9 @@ model Timesheet {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   date        DateTime
-  project     String
+  project     String?
+  startTime   String?  // Format HH:mm
+  endTime     String?  // Format HH:mm
   activity    String
   duration    Float    // Dalam jam (contoh: 1.5 = 1 jam 30 menit)
   note        String?
@@ -47,3 +49,10 @@ enum Source {
   WEB
   TELEGRAM
 }
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+

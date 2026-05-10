@@ -29,6 +29,8 @@ export const isAuthenticated = new Elysia()
       return { user: null }
     }
 
+    console.log(`[AUTH] Checking token. Payload ID: ${payload.id}`);
+
     const user = await prisma.user.findUnique({
       where: { id: payload.id as string },
       select: {
@@ -36,14 +38,17 @@ export const isAuthenticated = new Elysia()
         email: true,
         name: true,
         role: true,
+        telegramId: true,
       },
     })
 
     if (!user) {
+      console.log('[AUTH] User not found in DB for this token');
       set.status = 401
       return { user: null }
     }
 
+    console.log(`[AUTH] User found: ${user.email}, Role: ${user.role}`);
     return { user }
   })
   .onBeforeHandle(({ user, set }) => {
