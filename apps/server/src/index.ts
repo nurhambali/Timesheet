@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { jwt } from "@elysiajs/jwt";
 import { authRoutes } from "./routes/auth";
 import { userRoutes } from "./routes/user";
+import { timesheetRoutes } from "./routes/timesheet";
 
 const app = new Elysia()
   .use(
@@ -13,6 +14,7 @@ const app = new Elysia()
   .get("/", () => "Timesheet API is running")
   .use(authRoutes)
   .use(userRoutes)
+  .use(timesheetRoutes)
   .listen(3000);
 
 console.log(
