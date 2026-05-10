@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { Plus, Trash2, Upload, FileSpreadsheet } from 'lucide-react'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -17,6 +18,13 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [telegramData, setTelegramData] = useState<{telegramToken?: string, telegramId?: string} | null>(null)
   const [tokenLoading, setTokenLoading] = useState(false)
+  const [templateFile, setTemplateFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  
+  // Client Management State
+  const [clients, setClients] = useState<any[]>([])
+  const [newClientName, setNewClientName] = useState('')
+  const [clientLoading, setClientLoading] = useState(false)
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -28,6 +36,7 @@ export default function SettingsPage() {
         fetchSettings()
       }
       fetchTelegramToken()
+      fetchClients()
     }
   }, [])
 
@@ -42,6 +51,13 @@ export default function SettingsPage() {
     const res = await api.get('/user/telegram-token')
     if (res.success) {
       setTelegramData(res.data)
+    }
+  }
+
+  const fetchClients = async () => {
+    const res = await api.get('/clients')
+    if (res.success) {
+      setClients(res.data)
     }
   }
 
@@ -66,11 +82,63 @@ export default function SettingsPage() {
     setLoading(false)
   }
 
+  const handleAddClient = async () => {
+    if (!newClientName) return
+    setClientLoading(true)
+    const res = await api.post('/clients', { name: newClientName })
+    if (res.success) {
+      toast.success('Client berhasil ditambahkan')
+      setNewClientName('')
+      fetchClients()
+    } else {
+      toast.error(res.message)
+    }
+    setClientLoading(false)
+  }
+
+  const handleDeleteClient = async (id: string) => {
+    if (!confirm('Hapus client ini? Template terkait juga akan dihapus.')) return
+    const res = await api.delete(`/clients/${id}`)
+    if (res.success) {
+      toast.success('Client dihapus')
+      fetchClients()
+    }
+  }
+
+  const handleUploadClientTemplate = async (clientId: string, file: File) => {
+    setUploading(true)
+    const res = await api.uploadFile(`/clients/${clientId}/template`, file)
+    if (res.success) {
+      toast.success('Template client berhasil diperbarui')
+      fetchClients()
+    } else {
+      toast.error(res.message)
+    }
+    setUploading(false)
+  }
+
+  const handleUploadGlobalTemplate = async () => {
+    if (!templateFile) return
+    setUploading(true)
+    const res = await api.uploadFile('/settings/upload-template', templateFile)
+    if (res.success) {
+      toast.success('Template global berhasil diperbarui')
+      setTemplateFile(null)
+      const fileInput = document.getElementById('global-template') as HTMLInputElement
+      if (fileInput) fileInput.value = ''
+    } else {
+      toast.error(res.message)
+    }
+    setUploading(false)
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-slate-500">Konfigurasi preferensi aplikasi Anda.</p>
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="text-slate-500">Konfigurasi preferensi dan template laporan.</p>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -110,43 +178,77 @@ export default function SettingsPage() {
                       {tokenLoading ? 'Generating...' : 'Buat Kode Aktivasi'}
                     </Button>
                   )}
-                  
-                  {telegramData?.telegramToken && (
-                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={generateToken}>
-                      Ganti Kode Baru
-                    </Button>
-                  )}
                 </div>
               )}
             </CardContent>
           </Card>
 
           <Card className="shadow-sm border-slate-200/50">
-            <CardHeader>
-              <CardTitle>Notifikasi Pribadi</CardTitle>
-              <CardDescription>Atur bagaimana Anda menerima pengingat.</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div className="space-y-1">
+                <CardTitle>Daftar Client</CardTitle>
+                <CardDescription>Kelola template khusus untuk setiap client.</CardDescription>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between space-x-2">
-                <Label htmlFor="email-notif" className="flex flex-col space-y-1">
-                  <span>Email Notifikasi</span>
-                  <span className="font-normal text-slate-500">Kirim rekap mingguan ke email.</span>
-                </Label>
-                <Switch id="email-notif" />
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Nama Client Baru..." 
+                  value={newClientName} 
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
+                />
+                <Button size="icon" onClick={handleAddClient} disabled={clientLoading || !newClientName}>
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
-              <div className="flex items-center justify-between space-x-2">
-                <Label htmlFor="telegram-notif" className="flex flex-col space-y-1">
-                  <span>Telegram Bot</span>
-                  <span className="font-normal text-slate-500">Terima pengingat harian.</span>
-                </Label>
-                <Switch id="telegram-notif" checked />
+
+              <div className="space-y-3">
+                {clients.map((client) => (
+                  <div key={client.id} className="p-3 border rounded-lg flex items-center justify-between bg-slate-50/50 group">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{client.name}</span>
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                        {client.templateFile ? (
+                          <span className="text-green-600 flex items-center gap-1">
+                            <FileSpreadsheet className="w-3 h-3" /> Template Aktif
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Belum ada template</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="relative">
+                        <Input 
+                          type="file" 
+                          accept=".xlsx"
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleUploadClientTemplate(client.id, file)
+                          }}
+                        />
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600">
+                          <Upload className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500" onClick={() => handleDeleteClient(client.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {clients.length === 0 && (
+                  <p className="text-center py-4 text-sm text-slate-400 italic">Belum ada client terdaftar.</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
-          {user?.role === 'ADMIN' && (
+          {(user?.role?.toUpperCase() === 'ADMIN' || user?.role === 'ADMIN') && (
             <Card className="shadow-sm border-slate-200/50 border-primary/20 bg-primary/5">
               <CardHeader>
                 <CardTitle>Konfigurasi Sistem (Admin)</CardTitle>
@@ -172,6 +274,30 @@ export default function SettingsPage() {
               </CardFooter>
             </Card>
           )}
+
+          <Card className="shadow-sm border-slate-200/50 border-green-200 bg-green-50/30">
+            <CardHeader>
+              <CardTitle>Global Master Template</CardTitle>
+              <CardDescription>Fallback template jika client tidak punya template khusus.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="global-template">File Master (.xlsx)</Label>
+                <Input 
+                  id="global-template" 
+                  type="file" 
+                  accept=".xlsx"
+                  onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                  className="bg-white"
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50" onClick={handleUploadGlobalTemplate} disabled={uploading || !templateFile}>
+                {uploading ? 'Mengunggah...' : 'Update Template Global'}
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </div>
     </div>

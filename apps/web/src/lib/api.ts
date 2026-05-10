@@ -56,4 +56,33 @@ export const api = {
   delete(path: string) {
     return this.request(path, { method: 'DELETE' })
   },
+
+  async downloadBlob(path: string, body: any) {
+    const token = localStorage.getItem('auth_token')
+    const response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify(body)
+    })
+    if (!response.ok) throw new Error('Download failed')
+    return response.blob()
+  },
+
+  async uploadFile(path: string, file: File) {
+    const token = localStorage.getItem('auth_token')
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+      body: formData
+    })
+    return response.json()
+  }
 }

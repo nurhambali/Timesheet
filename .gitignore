@@ -50,5 +50,9 @@ rtk/
 *.swo
 
 # Prisma
-/apps/server/prisma/dev.db
 /apps/server/prisma/dev.db-journal
+
+# Excel Templates
+master.xlsx
+peek-excel.ts
+*.xlsx

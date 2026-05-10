@@ -2,6 +2,8 @@ import { Elysia, t } from 'elysia'
 import { jwt } from '@elysiajs/jwt'
 import { prisma } from '../lib/prisma'
 import { restartBot } from '../lib/bot'
+import * as fs from 'fs'
+import path from 'path'
 
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
   .use(
@@ -31,9 +33,9 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     return { user }
   })
   .get('/', async ({ user, set }) => {
-    if (!user || String(user.role).toUpperCase() !== 'ADMIN') {
-      set.status = 403
-      return { success: false, message: 'Forbidden' }
+    if (!user) {
+      set.status = 401
+      return { success: false, message: 'Unauthorized' }
     }
 
     const settings = await prisma.setting.findMany()
@@ -73,4 +75,33 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     }
   }, {
     body: t.Record(t.String(), t.Any())
+  })
+  .post('/upload-template', async ({ user, set, body }) => {
+    if (!user) {
+      set.status = 401
+      return { success: false, message: 'Unauthorized' }
+    }
+
+    const { file } = body as { file: File }
+    if (!file) {
+      set.status = 400
+      return { success: false, message: 'No file uploaded' }
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      const templatePath = path.resolve(process.cwd(), '../../master.xlsx')
+      
+      fs.writeFileSync(templatePath, buffer)
+
+      return { success: true, message: 'Template uploaded successfully' }
+    } catch (error: any) {
+      set.status = 500
+      return { success: false, message: 'Failed to upload template: ' + error.message }
+    }
+  }, {
+    body: t.Object({
+      file: t.File()
+    })
   })

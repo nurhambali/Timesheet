@@ -6,6 +6,7 @@ import { userRoutes } from "./routes/user";
 import { timesheetRoutes } from "./routes/timesheet";
 import { settingsRoutes } from "./routes/settings";
 import { holidayRoutes } from "./routes/holiday";
+import { clientRoutes } from "./routes/client";
 
 import { startBot } from "./lib/bot";
 
@@ -25,6 +26,7 @@ const app = new Elysia()
   .use(timesheetRoutes)
   .use(settingsRoutes)
   .use(holidayRoutes)
+  .use(clientRoutes)
   .listen(port);
 
 console.log(
