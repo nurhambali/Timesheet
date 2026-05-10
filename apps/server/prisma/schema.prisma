@@ -1,46 +1,71 @@
-// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
 
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
-}
-
 model User {
-  id            String      @id @default(cuid())
-  email         String      @unique
-  name          String
-  password      String      // Hashed
-  telegramId    String?     @unique  // ID Telegram user (Numeric)
-  telegramUsername String?  @unique  // Username Telegram user (@username)
-  telegramToken String?     @unique  // Token unik untuk link Telegram
-  role          Role        @default(USER)
-  timesheets    Timesheet[]
-  customers     Customer[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  email            String      @unique
+  name             String
+  password         String
+  telegramId       String?     @unique
+  telegramToken    String?     @unique
+  role             Role        @default("USER")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  telegramUsername String?     @unique
+  customers        Customer[]
+  timesheets       Timesheet[]
 }
 
 model Timesheet {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  date        DateTime
-  project     String?
-  startTime   String?  // Format HH:mm
-  endTime     String?  // Format HH:mm
-  activity    String
-  duration    Float    // Dalam jam (contoh: 1.5 = 1 jam 30 menit)
-  note        String?
-  source      Source   @default(WEB)  // Dari mana input dibuat
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime
+  project   String?
+  startTime String?
+  endTime   String?
+  activity  String
+  duration  Float
+  note      String?
+  source    Source   @default("WEB")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId, date])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  color     String   @default("#ef4444")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  templateFile String?
+  mapping      String?
+  isDefault    Boolean  @default(false)
+  userId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User?    @relation(fields: [userId], references: [id])
 }
 
 enum Role {
@@ -51,32 +76,4 @@ enum Role {
 enum Source {
   WEB
   TELEGRAM
-}
-
-model Setting {
-  key       String   @id
-  value     String
-  updatedAt DateTime @updatedAt
-}
-
-
-model Holiday {
-  id        String   @id @default(cuid())
-  title     String
-  date      DateTime
-  color     String   @default("#ef4444")
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-}
-
-model Customer {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  templateFile String?  // Nama file template yang diupload
-  mapping      String?  // JSON string untuk pemetaan sel
-  isDefault    Boolean  @default(false)
-  userId       String?  // User yang di-assign template ini
-  user         User?    @relation(fields: [userId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }

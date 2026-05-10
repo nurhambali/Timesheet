@@ -33,14 +33,21 @@ console.log(
   `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
 );
 
-// Start Telegram Bot
-startBot();
+// Start Telegram Bot with safety wrapper
+try {
+  startBot();
+} catch (error) {
+  console.error('❌ Failed to start Telegram Bot (likely 409 Conflict):', error);
+  console.log('💡 Server will continue running without bot features.');
+}
 
 // Graceful shutdown
 const handleExit = async () => {
   console.log('\n🛑 Shutting down server...');
-  const { stopBot } = await import("./lib/bot");
-  await stopBot();
+  try {
+    const { stopBot } = await import("./lib/bot");
+    await stopBot();
+  } catch (err) {}
   process.exit(0);
 };
 

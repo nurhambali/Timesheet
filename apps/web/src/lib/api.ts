@@ -18,7 +18,6 @@ export const api = {
     if (response.status === 401) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token')
-        // Only redirect if not already on login page
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login'
         }
@@ -39,13 +38,6 @@ export const api = {
     })
   },
 
-  patch(path: string, body: any) {
-    return this.request(path, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    })
-  },
-
   put(path: string, body: any) {
     return this.request(path, {
       method: 'PUT',
@@ -57,7 +49,7 @@ export const api = {
     return this.request(path, { method: 'DELETE' })
   },
 
-  async downloadBlob(path: string, body: any) {
+  async downloadBlob(path: string, body: any, filename: string = 'download.xlsx') {
     const token = localStorage.getItem('auth_token')
     const response = await fetch(`${API_URL}${path}`, {
       method: 'POST',
@@ -67,8 +59,23 @@ export const api = {
       },
       body: JSON.stringify(body)
     })
-    if (!response.ok) throw new Error('Download failed')
-    return response.blob()
+    
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(errData.message || 'Download failed')
+    }
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    return { success: true }
   },
 
   async uploadFile(path: string, file: File) {

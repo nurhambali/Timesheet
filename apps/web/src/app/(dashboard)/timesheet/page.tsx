@@ -1,14 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { Calendar as CalendarIcon, Download, Plus, Trash2, CheckCircle2, Circle, Clock, FileSpreadsheet } from 'lucide-react'
-import { api } from '@/lib/api'
-import { format } from 'date-fns'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { api } from '@/lib/api'
+import { Plus, Download, Trash2, Calendar as CalendarIcon, FileSpreadsheet, Pencil, X, Save, Clock, FileText } from 'lucide-react'
+import { format, startOfMonth, endOfMonth, differenceInMinutes, parse } from 'date-fns'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -16,48 +24,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { Textarea } from '@/components/ui/textarea'
 
 export default function TimesheetPage() {
   const [entries, setEntries] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
-  const [templates, setTemplates] = useState<any[]>([])
+  const [showProject, setShowProject] = useState(false)
   
-  // Form State
+  const [templates, setTemplates] = useState<any[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
     startTime: '09:00',
     endTime: '18:00',
     activity: '',
-    duration: 8,
-    project: ''
+    duration: 9,
+    project: 'Personal'
   })
-  
-  // Export State
-  const [exportMonth, setExportMonth] = useState(format(new Date(), 'yyyy-MM'))
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+
+  const [editingEntry, setEditingEntry] = useState<any>(null)
+  const [exportData, setExportData] = useState({
+    month: format(new Date(), 'yyyy-MM'),
+  })
 
   useEffect(() => {
     fetchEntries()
     fetchTemplates()
+    const saved = localStorage.getItem('showProjectField')
+    setShowProject(saved === 'true')
   }, [])
 
-  const fetchEntries = async () => {
-    setLoading(true)
-    const res = await api.get('/timesheet')
-    if (res.success) {
-      setEntries(res.data)
+  useEffect(() => {
+    if (formData.startTime && formData.endTime) {
+      try {
+        const start = parse(formData.startTime, 'HH:mm', new Date())
+        const end = parse(formData.endTime, 'HH:mm', new Date())
+        let diff = differenceInMinutes(end, start)
+        if (diff < 0) diff += 24 * 60
+        const hours = parseFloat((diff / 60).toFixed(1))
+        setFormData(prev => ({ ...prev, duration: hours }))
+      } catch (e) {}
     }
-    setLoading(false)
+  }, [formData.startTime, formData.endTime])
+
+  const fetchEntries = async () => {
+    const res = await api.get('/timesheet')
+    if (res.success) setEntries(res.data)
   }
 
   const fetchTemplates = async () => {
@@ -65,260 +81,267 @@ export default function TimesheetPage() {
     if (res.success) {
       setTemplates(res.data)
       if (res.data.length > 0) {
-        // Cari yang default, jika tidak ada pakai yang pertama
         const defaultTpl = res.data.find((t: any) => t.isDefault)
         setSelectedTemplateId(defaultTpl ? defaultTpl.id : res.data[0].id)
       }
     }
   }
 
-  const handleCreateEntry = async () => {
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
     const res = await api.post('/timesheet', formData)
     if (res.success) {
-      toast.success('Timesheet berhasil ditambahkan')
-      setIsDialogOpen(false)
+      toast.success('Entry berhasil ditambahkan')
+      setIsCreateOpen(false)
+      setFormData({ date: format(new Date(), 'yyyy-MM-dd'), startTime: '09:00', endTime: '18:00', activity: '', duration: 9, project: 'Personal' })
       fetchEntries()
-      setFormData({
-        ...formData,
-        activity: '',
-        project: ''
-      })
     }
+    setLoading(false)
   }
 
-  const handleDeleteEntry = async (id: string) => {
-    if (!confirm('Hapus entri ini?')) return
+  const openEditModal = (entry: any) => {
+    setEditingEntry(entry)
+    setFormData({
+      date: format(new Date(entry.date), 'yyyy-MM-dd'),
+      startTime: entry.startTime || '09:00',
+      endTime: entry.endTime || '18:00',
+      activity: entry.activity || '',
+      duration: entry.duration || 9,
+      project: entry.project || 'Personal'
+    })
+    setIsEditOpen(true)
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingEntry) return
+    setLoading(true)
+    const res = await api.put(`/timesheet/${editingEntry.id}`, formData)
+    if (res.success) {
+      toast.success('Data berhasil diperbarui')
+      setIsEditOpen(false)
+      fetchEntries()
+    }
+    setLoading(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Yakin ingin menghapus data ini?')) return
     const res = await api.delete(`/timesheet/${id}`)
     if (res.success) {
-      toast.success('Entri dihapus')
-      fetchEntries()
+      toast.success('Data dihapus'); fetchEntries()
     }
   }
 
   const handleExport = async () => {
-    if (!selectedTemplateId) {
-      toast.error('Silakan pilih template terlebih dahulu di Settings')
-      return
-    }
-    
+    toast.loading('Menyiapkan laporan...')
     try {
-      toast.loading('Menyiapkan laporan...')
-      const res = await api.downloadBlob('/timesheet/export-client', {
-        month: exportMonth,
+      const filename = `Timesheet_Report_${exportData.month}.xlsx`
+      await api.downloadBlob('/timesheet/export-client', {
+        month: exportData.month,
         clientId: selectedTemplateId
-      })
-      
-      const url = window.URL.createObjectURL(res)
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `Timesheet_${exportMonth}.xlsx`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      toast.dismiss()
-      toast.success('Laporan berhasil diunduh')
-      setIsExportOpen(false)
+      }, filename)
+      toast.dismiss(); toast.success('Laporan berhasil diunduh'); setIsExportOpen(false)
     } catch (error: any) {
       toast.dismiss()
-      const msg = error?.response?.data?.message || error?.message || 'Gagal mengunduh laporan'
-      toast.error(msg, { duration: 5000 })
+      toast.error('Gagal mengunduh laporan')
     }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Timesheet</h2>
-          <p className="text-slate-500">Kelola aktivitas harian dan ekspor laporan.</p>
+          <p className="text-slate-500">Kelola aktivitas harian Anda.</p>
         </div>
-        
         <div className="flex gap-2">
-          {/* DIALOG EXPORT */}
           <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
-            <DialogTrigger render={
-              <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5">
+            <DialogTrigger render={(props) => (
+              <Button {...props} variant="outline" className="gap-2">
                 <Download className="w-4 h-4" /> Export Excel
               </Button>
-            } />
+            )} />
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-green-600" />
-                  Ekspor Laporan
-                </DialogTitle>
+                <DialogTitle>Export Laporan Excel</DialogTitle>
+                <DialogDescription>Pilih bulan dan template yang akan digunakan.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="space-y-2">
+                <div className="grid gap-2">
                   <Label>Pilih Bulan</Label>
-                  <Input 
-                    type="month" 
-                    value={exportMonth} 
-                    onChange={(e) => setExportMonth(e.target.value)} 
-                  />
+                  <Input type="month" value={exportData.month} onChange={(e) => setExportData({...exportData, month: e.target.value})} />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-2">
                   <Label>Pilih Template</Label>
+                  {/* FIX: Gunakan wrapper untuk onValueChange agar sesuai tipe data Base UI */}
                   <Select value={selectedTemplateId} onValueChange={(val) => setSelectedTemplateId(val || '')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih Format Template" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Pilih Template" /></SelectTrigger>
                     <SelectContent>
-                      {templates.map((tpl) => (
-                        <SelectItem key={tpl.id} value={tpl.id}>
-                          {tpl.name} {tpl.user ? `(${tpl.user.name})` : '(General)'}
+                      {templates.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name} {t.isDefault ? '(Default)' : ''}
                         </SelectItem>
                       ))}
-                      {templates.length === 0 && (
-                        <SelectItem value="none" disabled>Belum ada template di Settings</SelectItem>
-                      )}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <DialogFooter>
-                <Button onClick={handleExport} className="w-full">Unduh Sekarang</Button>
-              </DialogFooter>
+              <Button onClick={handleExport} className="w-full gap-2">
+                <FileSpreadsheet className="w-4 h-4" /> Unduh Sekarang
+              </Button>
             </DialogContent>
           </Dialog>
 
-          {/* DIALOG ADD ENTRY */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger render={
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" /> Tambah Aktivitas
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <DialogTrigger render={(props) => (
+              <Button {...props} className="gap-2">
+                <Plus className="w-4 h-4" /> Tambah Data
               </Button>
-            } />
+            )} />
             <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Aktivitas Baru</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
+              <DialogHeader><DialogTitle>Tambah Aktivitas Baru</DialogTitle></DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Tanggal</Label>
-                    <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
+                    <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required />
                   </div>
                   <div className="space-y-2">
                     <Label>Durasi (Jam)</Label>
-                    <Input type="number" step="0.5" value={formData.duration} onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value)})} />
+                    <Input type="number" step="0.1" value={formData.duration} onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value)})} required />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Jam Mulai</Label>
+                    <Label>Mulai</Label>
                     <Input type="time" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Jam Selesai</Label>
+                    <Label>Selesai</Label>
                     <Input type="time" value={formData.endTime} onChange={(e) => setFormData({...formData, endTime: e.target.value})} />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Proyek</Label>
-                  <Input placeholder="Nama Proyek (Opsional)" value={formData.project} onChange={(e) => setFormData({...formData, project: e.target.value})} />
-                </div>
+                {showProject && (
+                   <div className="space-y-2">
+                    <Label>Project</Label>
+                    <Input value={formData.project} onChange={(e) => setFormData({...formData, project: e.target.value})} />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Aktivitas</Label>
-                  <Input placeholder="Apa yang Anda kerjakan?" value={formData.activity} onChange={(e) => setFormData({...formData, activity: e.target.value})} />
+                  <Textarea 
+                    placeholder="Apa yang Anda kerjakan hari ini?" 
+                    value={formData.activity} 
+                    onChange={(e) => setFormData({...formData, activity: e.target.value})}
+                    className="min-h-[120px] resize-none"
+                    required 
+                  />
                 </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleCreateEntry} className="w-full">Simpan Aktivitas</Button>
-              </DialogFooter>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Menyimpan...' : 'Simpan Aktivitas'}
+                </Button>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Entri</CardTitle>
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{entries.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Jam</CardTitle>
-            <Clock className="w-4 h-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {entries.reduce((acc, curr) => acc + curr.duration, 0)} Jam
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Bulan Ini</CardTitle>
-            <CalendarIcon className="w-4 h-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {entries.filter(e => format(new Date(e.date), 'yyyy-MM') === format(new Date(), 'yyyy-MM')).length} Entri
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle>Riwayat Aktivitas</CardTitle>
-        </CardHeader>
+      <Card className="shadow-sm border-slate-200/50">
+        <CardHeader><CardTitle className="text-lg">Daftar Aktivitas</CardTitle></CardHeader>
         <CardContent>
-          <div className="relative overflow-x-auto">
-            <table className="w-full text-sm text-left text-slate-500">
-              <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+          <div className="relative overflow-x-auto border rounded-lg">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-700 uppercase bg-slate-50 border-b">
                 <tr>
-                  <th className="px-6 py-3">Tanggal</th>
-                  <th className="px-6 py-3">Waktu</th>
-                  <th className="px-6 py-3">Aktivitas</th>
-                  <th className="px-6 py-3">Durasi</th>
-                  <th className="px-6 py-3">Aksi</th>
+                  <th className="px-4 py-3 font-semibold">Tanggal</th>
+                  {showProject && <th className="px-4 py-3 font-semibold">Project</th>}
+                  <th className="px-4 py-3 font-semibold">Waktu</th>
+                  <th className="px-4 py-3 font-semibold">Jam</th>
+                  <th className="px-4 py-3 font-semibold">Aktivitas</th>
+                  <th className="px-4 py-3 text-right font-semibold">Aksi</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y">
                 {entries.map((entry) => (
-                  <tr key={entry.id} className="bg-white border-b hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">
+                  <tr key={entry.id} className="bg-white hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap font-medium">
                       {format(new Date(entry.date), 'dd MMM yyyy')}
                     </td>
-                    <td className="px-6 py-4">
-                      {entry.startTime} - {entry.endTime}
+                    {showProject && <td className="px-4 py-4">{entry.project}</td>}
+                    <td className="px-4 py-4 text-slate-500">{entry.startTime} - {entry.endTime}</td>
+                    <td className="px-4 py-4">
+                      <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold">{entry.duration}h</span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-800">{entry.activity}</div>
-                      <div className="text-xs text-slate-400">{entry.project}</div>
+                    <td className="px-4 py-4 max-w-md">
+                      <p className="line-clamp-2 text-slate-600 leading-relaxed">{entry.activity}</p>
                     </td>
-                    <td className="px-6 py-4">{entry.duration} Jam</td>
-                    <td className="px-6 py-4">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDeleteEntry(entry.id)}
-                      >
+                    <td className="px-4 py-4 text-right space-x-1">
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-primary hover:bg-primary/5" onClick={() => openEditModal(entry)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(entry.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </td>
                   </tr>
                 ))}
-                {entries.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-400 italic">
-                      Belum ada data aktivitas.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Aktivitas</DialogTitle></DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tanggal</Label>
+                <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Durasi (Jam)</Label>
+                <Input type="number" step="0.1" value={formData.duration} onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value)})} required />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Mulai</Label>
+                <Input type="time" value={formData.startTime} onChange={(e) => setFormData({...formData, startTime: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Selesai</Label>
+                <Input type="time" value={formData.endTime} onChange={(e) => setFormData({...formData, endTime: e.target.value})} />
+              </div>
+            </div>
+            {showProject && (
+              <div className="space-y-2">
+                <Label>Project</Label>
+                <Input value={formData.project} onChange={(e) => setFormData({...formData, project: e.target.value})} />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Aktivitas</Label>
+              <Textarea 
+                placeholder="Apa yang Anda kerjakan hari ini?" 
+                value={formData.activity} 
+                onChange={(e) => setFormData({...formData, activity: e.target.value})}
+                className="min-h-[150px] resize-none focus:ring-primary"
+                required 
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsEditOpen(false)}>Batal</Button>
+                <Button type="submit" className="flex-1 gap-2" disabled={loading}>
+                    <Save className="w-4 h-4" /> {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { Plus, Trash2, Upload, FileSpreadsheet, Settings2, X, Check, ArrowRight, User as UserIcon, Star, Table as TableIcon, Info } from 'lucide-react'
+import { Plus, Trash2, Upload, FileSpreadsheet, Settings2, X, Check, ArrowRight, User as UserIcon, Star, Table as TableIcon, Info, Sparkles } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -40,6 +40,8 @@ export default function SettingsPage() {
   const [mapping, setMapping] = useState<any>({
     name: 'C2',
     period: 'I3',
+    startDateCell: '',
+    endDateCell: '',
     startRow: 10,
     dateCol: 'A',
     startCol: 'C',
@@ -166,12 +168,27 @@ export default function SettingsPage() {
     
     if (template.mapping) {
       try {
-        setMapping(JSON.parse(template.mapping))
+        const parsedMapping = JSON.parse(template.mapping)
+        setMapping({
+            name: 'C2',
+            period: 'I3',
+            startDateCell: '',
+            endDateCell: '',
+            startRow: 10,
+            dateCol: 'A',
+            startCol: 'C',
+            endCol: 'E',
+            durationCol: 'F',
+            activityCol: 'G',
+            ...parsedMapping
+        })
       } catch (e) {}
     } else {
       setMapping({
         name: 'C2',
         period: 'I3',
+        startDateCell: '',
+        endDateCell: '',
         startRow: 10,
         dateCol: 'A',
         startCol: 'C',
@@ -224,7 +241,7 @@ export default function SettingsPage() {
       {/* MODAL MAPPING & ASSIGNMENT */}
       {editingTemplate && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
-          <Card className="w-full max-w-6xl max-h-[90vh] shadow-2xl border-primary/20 animate-in zoom-in duration-300 flex flex-col">
+          <Card className="w-full max-w-6xl max-h-[95vh] shadow-2xl border-primary/20 animate-in zoom-in duration-300 flex flex-col">
             <CardHeader className="bg-white border-b shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -278,7 +295,7 @@ export default function SettingsPage() {
                             </td>
                             {getPreviewCols().map(col => {
                               const cellAddr = `${col}${row._row}`
-                              const isHeaderMapped = mapping.name === cellAddr || mapping.period === cellAddr
+                              const isHeaderMapped = mapping.name === cellAddr || mapping.period === cellAddr || mapping.startDateCell === cellAddr || mapping.endDateCell === cellAddr
                               const isColMapped = mapping.dateCol === col || mapping.startCol === col || mapping.endCol === col || mapping.durationCol === col || mapping.activityCol === col
                               const isRowActive = row._row >= mapping.startRow
                               
@@ -318,7 +335,7 @@ export default function SettingsPage() {
               </div>
 
               {/* PANEL KANAN: FORM MAPPING */}
-              <div className="w-full md:w-[380px] overflow-y-auto p-6 space-y-8 bg-white">
+              <div className="w-full md:w-[420px] overflow-y-auto p-6 space-y-8 bg-white">
                 {/* Section 1: Header Mapping */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 border-b pb-2">
@@ -336,23 +353,61 @@ export default function SettingsPage() {
                         onChange={(e) => setMapping({...mapping, name: e.target.value.toUpperCase()})}
                         className="font-mono uppercase h-9 border-slate-200 focus:ring-orange-400" 
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <Label className="text-xs font-semibold text-slate-600">Sel Periode Laporan</Label>
-                        <span className="text-[10px] text-slate-400 italic">Contoh: I3</span>
+                      <div className="flex items-start gap-1.5 p-2 bg-orange-50 rounded border border-orange-100">
+                        <Sparkles className="w-3.5 h-3.5 text-orange-500 mt-0.5" />
+                        <p className="text-[10px] text-orange-700 leading-tight">
+                          <b>Smart Replace:</b> Jika sel berisi titik-titik (misal: "Nama : ...."), sistem hanya akan mengganti titik-titiknya saja.
+                        </p>
                       </div>
-                      <Input 
-                        value={mapping.period} 
-                        onChange={(e) => setMapping({...mapping, period: e.target.value.toUpperCase()})}
-                        className="font-mono uppercase h-9 border-slate-200 focus:ring-orange-400" 
-                      />
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                        <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Periode Laporan</Label>
+                        
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between items-center">
+                                <Label className="text-[11px] text-slate-600">Gabungan (Satu Sel)</Label>
+                                <span className="text-[9px] text-slate-400">Contoh: I3</span>
+                            </div>
+                            <Input 
+                                value={mapping.period} 
+                                onChange={(e) => setMapping({...mapping, period: e.target.value.toUpperCase(), startDateCell: '', endDateCell: ''})}
+                                placeholder="I3"
+                                className="font-mono uppercase h-8 border-slate-200" 
+                            />
+                        </div>
+
+                        <div className="relative py-2">
+                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100" /></div>
+                            <div className="relative flex justify-center text-[9px] uppercase"><span className="bg-white px-2 text-slate-400 font-bold">Atau Terpisah</span></div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-[11px] text-slate-600">Tgl Mulai</Label>
+                                <Input 
+                                    value={mapping.startDateCell} 
+                                    onChange={(e) => setMapping({...mapping, startDateCell: e.target.value.toUpperCase(), period: ''})}
+                                    placeholder="I3"
+                                    className="font-mono uppercase h-8 border-slate-200" 
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[11px] text-slate-600">Tgl Selesai</Label>
+                                <Input 
+                                    value={mapping.endDateCell} 
+                                    onChange={(e) => setMapping({...mapping, endDateCell: e.target.value.toUpperCase(), period: ''})}
+                                    placeholder="K3"
+                                    className="font-mono uppercase h-8 border-slate-200" 
+                                />
+                            </div>
+                        </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Section 2: Table Column Mapping */}
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4">
                   <div className="flex items-center gap-2 border-b pb-2">
                     <div className="w-2 h-2 rounded-full bg-blue-500" />
                     <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Mapping Tabel Data</h3>
@@ -397,7 +452,7 @@ export default function SettingsPage() {
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 flex gap-2">
                   <Info className="w-4 h-4 text-blue-500 shrink-0" />
                   <p className="text-[10px] text-blue-700 leading-relaxed">
-                    Gunakan panel preview di samping kiri sebagai panduan untuk melihat koordinat sel dan kolom di file Excel Anda.
+                    Lihat panel preview di samping kiri. Mapping Header akan berwarna Oranye, dan Mapping Tabel akan berwarna Biru.
                   </p>
                 </div>
               </div>
@@ -609,6 +664,37 @@ export default function SettingsPage() {
               </CardFooter>
             </Card>
           )}
+
+          <Card className="shadow-sm border-slate-200/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings2 className="w-5 h-5 text-primary" /> Kustomisasi & Field
+              </CardTitle>
+              <CardDescription>Pilih kolom yang ingin Anda tampilkan di Timesheet.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+               <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-bold">Kolom Project</Label>
+                    <p className="text-[11px] text-slate-500">Tampilkan input Project di form dan tabel timesheet.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      size="sm" 
+                      variant={localStorage.getItem('showProjectField') === 'true' ? 'default' : 'outline'}
+                      onClick={() => {
+                        const current = localStorage.getItem('showProjectField') === 'true';
+                        localStorage.setItem('showProjectField', (!current).toString());
+                        toast.success(`Kolom Project ${!current ? 'diaktifkan' : 'disembunyikan'}`);
+                        window.location.reload(); // Reload untuk apply perubahan ke semua komponen
+                      }}
+                    >
+                      {localStorage.getItem('showProjectField') === 'true' ? 'Aktif' : 'Nonaktif'}
+                    </Button>
+                  </div>
+               </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
