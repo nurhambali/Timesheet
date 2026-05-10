@@ -4,6 +4,10 @@ import { prisma } from '../lib/prisma'
 import ExcelJS from 'exceljs'
 import * as fs from 'fs'
 import path from 'path'
+import { format, startOfMonth, endOfMonth, isWeekend, parseISO } from 'date-fns'
+
+// Force IDE to ignore property errors by casting to any
+const db = prisma as any
 
 export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
   .use(
@@ -25,7 +29,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
       return { user: null }
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: String(payload.id) },
       select: { id: true, email: true, name: true, role: true }
     })
@@ -40,7 +44,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
 
     const isAdmin = String(user.role).toUpperCase() === 'ADMIN'
     
-    const entries = await prisma.timesheet.findMany({
+    const entries = await db.timesheet.findMany({
       where: isAdmin ? {} : { userId: user.id },
       include: isAdmin ? { user: { select: { name: true, email: true } } } : undefined,
       orderBy: { date: 'desc' },
@@ -54,104 +58,190 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
   .post(
     '/export-client',
     async ({ body, user, set }) => {
+      console.log('--- START EXPORT (REFINED) ---')
       if (!user) {
         set.status = 401
         return { success: false, message: 'Unauthorized' }
       }
 
-      const { month, clientId } = body
-      const [yearStr, monthStr] = month.split('-')
-      const year = parseInt(yearStr)
-      const monthNum = parseInt(monthStr)
-
-      // 1. Ambil Data
-      const entries = await prisma.timesheet.findMany({
-        where: {
-          userId: user.id,
-          date: {
-            gte: new Date(year, monthNum - 1, 1),
-            lte: new Date(year, monthNum, 0)
-          }
-        },
-        orderBy: { date: 'asc' }
-      })
-
-      if (entries.length === 0) {
-        set.status = 404
-        return { success: false, message: 'No entries found for this month' }
-      }
-
-      // 2. Tentukan Template Path
-      let templatePath = ''
-      let clientName = 'Client'
-
-      if (clientId) {
-        const customer = await prisma.customer.findUnique({ where: { id: clientId } })
-        if (customer && customer.templateFile) {
-          templatePath = path.resolve(process.cwd(), '../../uploads/templates', customer.templateFile)
-          clientName = customer.name
-        }
-      }
-
-      if (!templatePath || !fs.existsSync(templatePath)) {
-        templatePath = path.resolve(process.cwd(), '../../master.xlsx')
-      }
-
-      console.log('Exporting with template:', templatePath)
-      
-      if (!fs.existsSync(templatePath)) {
-        set.status = 500
-        return { success: false, message: 'Template Excel not found on server' }
-      }
-
       try {
+        const { month, clientId } = body
+        const [yearStr, monthStr] = month.split('-')
+        const year = parseInt(yearStr)
+        const monthNum = parseInt(monthStr)
+
+        const startDate = startOfMonth(new Date(year, monthNum - 1))
+        const endDate = endOfMonth(new Date(year, monthNum - 1))
+
+        // 1. Ambil Data
+        const [entries, holidays] = await Promise.all([
+          db.timesheet.findMany({
+            where: {
+              userId: user.id,
+              date: { gte: startDate, lte: endDate }
+            },
+            orderBy: { date: 'asc' }
+          }),
+          db.holiday.findMany({
+            where: {
+              date: { gte: startDate, lte: endDate }
+            }
+          })
+        ])
+
+        if (entries.length === 0) {
+          set.status = 404
+          return { success: false, message: 'No entries found for this month' }
+        }
+
+        // Simpan daftar tanggal libur dalam format YYYY-MM-DD
+        const holidayDates = holidays.map((h: any) => {
+          const d = h.date instanceof Date ? h.date : new Date(h.date)
+          return format(d, 'yyyy-MM-dd')
+        })
+
+        // 2. Tentukan Template Path
+        let templatePath = ''
+        let clientName = 'Client'
+        let mapping = {
+          name: 'C2',
+          period: 'I3',
+          startRow: 10,
+          dateCol: 'A',
+          startCol: 'C',
+          endCol: 'E',
+          durationCol: 'F',
+          activityCol: 'G'
+        }
+
+        if (clientId) {
+          const customer = await db.customer.findUnique({ where: { id: clientId } })
+          if (customer) {
+            clientName = customer.name
+            if (customer.templateFile) {
+              templatePath = path.resolve(process.cwd(), '../../uploads/templates', customer.templateFile)
+            }
+            if (customer.mapping) {
+              try {
+                mapping = { ...mapping, ...JSON.parse(customer.mapping) }
+              } catch (e) {}
+            }
+          }
+        }
+
+        if (!templatePath || !fs.existsSync(templatePath)) {
+          templatePath = path.resolve(process.cwd(), '../../master.xlsx')
+        }
+
+        if (!fs.existsSync(templatePath)) {
+          set.status = 500
+          return { success: false, message: 'Template Excel tidak ditemukan di server.' }
+        }
+
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(templatePath);
         const worksheet = workbook.getWorksheet(1); 
         
-        if (!worksheet) {
-          throw new Error('Worksheet not found');
-        }
+        if (!worksheet) throw new Error('Worksheet (Sheet 1) tidak ditemukan');
 
         // 3. Isi Header
-        const nameCell = worksheet.getCell('C2');
-        nameCell.value = user.name;
-        
-        const periodCell = worksheet.getCell('I3');
-        periodCell.value = month;
+        if (mapping.name) worksheet.getCell(mapping.name).value = user.name;
+        if (mapping.period) {
+          const periodText = `${format(startDate, 'dd MMMM yyyy')} s/d ${format(endDate, 'dd MMMM yyyy')}`
+          worksheet.getCell(mapping.period).value = periodText;
+        }
 
-        // 4. Isi Data (Mulai Baris 10)
-        entries.forEach((entry, index) => {
-          const rowIdx = 10 + index
+        // 4. Isi Data & Styling
+        entries.forEach((entry: any, index: number) => {
+          const rowIdx = (Number(mapping.startRow) || 10) + index
           
-          // Helper untuk mengisi sel sambil memastikan tidak ada sisa formula yang merusak
-          const fillCell = (cellId: string, value: any) => {
-            const cell = worksheet.getCell(cellId);
-            cell.value = value;
+          // Konversi tanggal entry ke string YYYY-MM-DD untuk perbandingan
+          const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date)
+          const dateStr = format(entryDate, 'yyyy-MM-dd')
+          
+          const isHoliday = holidayDates.includes(dateStr)
+          const isOffDay = isWeekend(entryDate) || isHoliday
+
+          const styleCell = (col: string, val: any, isRed: boolean) => {
+            if (!col) return
+            const cell = worksheet.getCell(`${col}${rowIdx}`);
+            cell.value = val;
+            
+            // Border Tipis (Selalu ada agar rapi)
+            cell.border = {
+              top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'}
+            };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+            if (isRed) {
+              // Background Merah Muda
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFFFE1E1' }
+              };
+              // Font Merah Terang (#FF0000)
+              cell.font = { color: { argb: 'FFFF0000' }, bold: true };
+            } else {
+              // Reset ke default jika bukan hari libur (mencegah carry-over style)
+              cell.fill = { type: 'pattern', pattern: 'none' };
+              cell.font = { color: { argb: 'FF000000' }, bold: false };
+            }
           };
 
-          fillCell(`A${rowIdx}`, entry.date.toLocaleDateString('en-GB'));
-          fillCell(`C${rowIdx}`, entry.startTime || '-');
-          fillCell(`E${rowIdx}`, entry.endTime || '-');
-          fillCell(`F${rowIdx}`, entry.duration);
-          fillCell(`G${rowIdx}`, entry.activity);
-          
-          ['A', 'C', 'E', 'F', 'G'].forEach(col => {
-            worksheet.getCell(`${col}${rowIdx}`).alignment = { horizontal: 'center', vertical: 'middle' };
+          // Isi Kolom Tanggal
+          if (mapping.dateCol) {
+            const cell = worksheet.getCell(`${mapping.dateCol}${rowIdx}`);
+            cell.value = entryDate;
+            cell.numFmt = 'dd/mm/yyyy';
+            styleCell(mapping.dateCol, entryDate, isOffDay);
+          }
+
+          styleCell(mapping.startCol, entry.startTime || '-', isOffDay);
+          styleCell(mapping.endCol, entry.endTime || '-', isOffDay);
+          styleCell(mapping.durationCol, entry.duration, isOffDay);
+          styleCell(mapping.activityCol, entry.activity, isOffDay);
+        });
+
+        // 5. PENANGANAN FORMULA (Cara Paling Aman Anti-Corrupt)
+        // Kita hanya akan "mengamankan" rumus yang ada di seluruh sheet tanpa menyentuh internal model (_model)
+        worksheet.eachRow((row) => {
+          row.eachCell((cell) => {
+            if (cell.type === ExcelJS.ValueType.Formula) {
+              try {
+                // Ambil nilai formula dan result-nya
+                const f = cell.formula;
+                const r = cell.result;
+                
+                // Jika formula valid, set ulang dengan cara yang bersih
+                if (f) {
+                  cell.value = { formula: f, result: r };
+                } else {
+                  // Jika f kosong (shared formula yang rusak), ambil hasil terakhirnya saja agar tidak corrupt
+                  cell.value = r;
+                }
+              } catch (e) {
+                // Fallback terakhir: simpan hasilnya saja jika akses formula gagal
+                cell.value = cell.result;
+              }
+            }
           });
         });
 
-        // 5. Generate Output
         const buffer = await workbook.xlsx.writeBuffer();
         
+        console.log('Export Success: ' + clientName)
         set.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        set.headers['Content-Disposition'] = `attachment; filename="Timesheet_${user.name}_${clientName}_${month}.xlsx"`
+        set.headers['Content-Disposition'] = `attachment; filename="Timesheet_${user.name}_${month}.xlsx"`
         
         return buffer
       } catch (err: any) {
-        console.error('Export Error:', err)
+        console.error('EXPORT FAILED:', err)
         set.status = 500
-        return { success: false, message: 'Export Error: ' + err.message }
+        return { 
+          success: false, 
+          message: 'Export gagal: ' + err.message 
+        }
       }
     },
     {
@@ -172,7 +262,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
       const { project, startTime, endTime, activity, duration, date, note, source } = body
 
       try {
-        const entry = await prisma.timesheet.create({
+        const entry = await db.timesheet.create({
           data: {
             userId: user.id,
             project,
@@ -218,7 +308,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
       }
 
       try {
-        const entry = await prisma.timesheet.update({
+        const entry = await db.timesheet.update({
           where: { id, userId: user.id },
           data: {
             ...body,
@@ -257,7 +347,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
       }
 
       try {
-        await prisma.timesheet.delete({
+        await db.timesheet.delete({
           where: { id, userId: user.id },
         })
 
@@ -282,7 +372,7 @@ export const timesheetRoutes = new Elysia({ prefix: '/timesheet' })
       const { ids } = body as { ids: string[] }
 
       try {
-        await prisma.timesheet.deleteMany({
+        await db.timesheet.deleteMany({
           where: {
             id: { in: ids },
             userId: user.id

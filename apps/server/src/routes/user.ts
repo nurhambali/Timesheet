@@ -40,7 +40,7 @@ export const userRoutes = new Elysia({ prefix: '/user' })
 
     const userData = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { telegramToken: true, telegramId: true }
+      select: { telegramToken: true, telegramId: true, telegramUsername: true }
     })
 
     return { success: true, data: userData }
@@ -79,6 +79,7 @@ export const userRoutes = new Elysia({ prefix: '/user' })
         role: true,
         createdAt: true,
         telegramId: true,
+        telegramUsername: true,
       },
       orderBy: { createdAt: 'desc' }
     })
