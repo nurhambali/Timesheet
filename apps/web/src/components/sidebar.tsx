@@ -1,20 +1,28 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Clock, Settings, LogOut, User } from 'lucide-react'
+import { LayoutDashboard, Clock, Settings, LogOut, User, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: Clock, label: 'Timesheet', href: '/timesheet' },
-  { icon: Settings, label: 'Settings', href: '/settings' },
-]
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user')
+    if (userData) setUser(JSON.parse(userData))
+  }, [])
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+    { icon: Clock, label: 'Timesheet', href: '/timesheet' },
+    ...(user?.role === 'ADMIN' ? [{ icon: Users, label: 'Users', href: '/users' }] : []),
+    { icon: Settings, label: 'Settings', href: '/settings' },
+  ]
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token')
@@ -52,7 +60,8 @@ export function Sidebar() {
             <User className="w-5 h-5 text-slate-500" />
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium truncate">User</p>
+            <p className="text-sm font-medium truncate">{user?.name || 'User'}</p>
+            <p className="text-xs text-slate-500 truncate">{user?.role}</p>
           </div>
         </div>
         <Button 

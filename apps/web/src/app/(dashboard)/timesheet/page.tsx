@@ -73,11 +73,13 @@ export default function TimesheetPage() {
         </div>
         
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" /> Tambah Entry
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger
+            render={
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" /> Tambah Entry
+              </Button>
+            }
+          />
           <DialogContent>
             <form onSubmit={handleSubmit}>
               <DialogHeader>

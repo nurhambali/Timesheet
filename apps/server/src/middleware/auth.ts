@@ -11,13 +11,19 @@ export const isAuthenticated = new Elysia()
     })
   )
   .use(cookie())
-  .derive(async ({ jwt, cookie: { auth }, set }) => {
-    if (!auth.value) {
+  .derive(async ({ jwt, cookie: { auth }, headers, set }) => {
+    let token = auth.value as string | undefined
+
+    if (!token && headers.authorization?.startsWith('Bearer ')) {
+      token = headers.authorization.split(' ')[1]
+    }
+
+    if (!token) {
       set.status = 401
       return { user: null }
     }
 
-    const payload = await jwt.verify(auth.value)
+    const payload = await jwt.verify(token)
     if (!payload) {
       set.status = 401
       return { user: null }
