@@ -32,7 +32,6 @@ export const startBot = async () => {
       { command: 'report', description: 'Pilih dan unduh laporan bulanan' },
     ]);
 
-    // 1. PUBLIC COMMANDS
     bot.start(async (ctx) => {
       const payload = (ctx as any).payload;
       const telegramId = String(ctx.from.id);
@@ -55,14 +54,15 @@ export const startBot = async () => {
       ctx.reply('👋 *Timesheet Bot Aktif!*\n\nKetik /help untuk panduan atau gunakan menu perintah.', { parse_mode: 'Markdown' });
     });
 
-    // 2. MIDDLEWARE
     bot.use(async (ctx, next) => {
       if (!ctx.from) return next();
 
       const telegramId = String(ctx.from.id);
       const user = await prisma.user.findUnique({ where: { telegramId } });
       
-      if (!user && !ctx.message?.text?.startsWith('/start')) {
+      // FIX: Pengecekan teks yang aman untuk TypeScript
+      const message = ctx.message as any;
+      if (!user && !(message?.text?.startsWith('/start'))) {
         return ctx.reply('⚠️ *Akses Ditolak*\n\nAnda belum terdaftar. Silakan tautkan akun Anda melalui Dashboard Web.', { parse_mode: 'Markdown' });
       }
       
@@ -70,7 +70,6 @@ export const startBot = async () => {
       return next();
     });
 
-    // 3. PROTECTED ROUTES
     bot.help((ctx) => {
       const helpMsg = `
 📖 *Panduan Penggunaan Timesheet Bot*
@@ -137,7 +136,6 @@ Klik menu /report dan pilih bulan yang diinginkan.
           csv += `${e.date.toISOString().split('T')[0]},${e.startTime || ''},${e.endTime || ''},"${e.activity}"\n`;
         });
 
-        // Nama file: Timesheet_Nama_Bulan_Tahun.csv
         const safeName = user.name.replace(/\s+/g, '_');
         const filename = `Timesheet_${safeName}_${month}_${year}.csv`;
 
