@@ -12,6 +12,7 @@ export const isAuthenticated = new Elysia()
   )
   .use(cookie())
   .derive(async ({ jwt, cookie: { auth }, headers, set }) => {
+    console.log('[AUTH] Derive execution started');
     let token = auth.value as string | undefined
 
     if (!token && headers.authorization?.startsWith('Bearer ')) {
@@ -24,6 +25,8 @@ export const isAuthenticated = new Elysia()
     }
 
     const payload = await jwt.verify(token)
+    console.log('[AUTH] Token verified. Full Payload:', JSON.stringify(payload));
+    
     if (!payload) {
       set.status = 401
       return { user: null }
@@ -32,7 +35,7 @@ export const isAuthenticated = new Elysia()
     console.log(`[AUTH] Checking token. Payload ID: ${payload.id}`);
 
     const user = await prisma.user.findUnique({
-      where: { id: payload.id as string },
+      where: { id: String(payload.id) },
       select: {
         id: true,
         email: true,
@@ -43,17 +46,25 @@ export const isAuthenticated = new Elysia()
     })
 
     if (!user) {
-      console.log('[AUTH] User not found in DB for this token');
+      console.error('[AUTH] User not found in database for ID:', payload.id);
       set.status = 401
       return { user: null }
     }
 
-    console.log(`[AUTH] User found: ${user.email}, Role: ${user.role}`);
-    return { user }
+    // Paksa pastikan role adalah string
+    return { 
+      user: {
+        ...user,
+        role: String(user.role)
+      }
+    }
   })
-  .onBeforeHandle(({ user, set }) => {
+  .onBeforeHandle(({ user, set, request }) => {
+    // Abaikan preflight
+    if (request.method === 'OPTIONS') return;
+
     if (!user) {
       set.status = 401
-      return { success: false, message: 'Unauthorized' }
+      return { success: false, message: 'Unauthorized: Please login again' }
     }
   })

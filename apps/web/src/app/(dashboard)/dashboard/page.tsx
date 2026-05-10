@@ -14,13 +14,22 @@ import { api } from '@/lib/api'
 
 export default function DashboardPage() {
   const [allEntries, setAllEntries] = useState([])
+  const [holidays, setHolidays] = useState<any[]>([])
   const [selectedMonth, setSelectedMonth] = useState('') // Format YYYY-MM
   const [availableMonths, setAvailableMonths] = useState<string[]>([])
 
   const fetchEntries = async () => {
-    const response = await api.get('/timesheet')
-    if (response.success) {
-      const data = response.data
+    const [timesheetRes, holidayRes] = await Promise.all([
+      api.get('/timesheet'),
+      api.get('/holiday')
+    ])
+
+    if (holidayRes.success) {
+      setHolidays(holidayRes.data)
+    }
+
+    if (timesheetRes.success) {
+      const data = timesheetRes.data
       setAllEntries(data)
 
       // Cari semua bulan unik dari data
@@ -65,7 +74,15 @@ export default function DashboardPage() {
 
   // Hitung stats berdasarkan data yang terfilter
   const stats = {
-    totalHours: filteredEntries.reduce((acc: number, e: any) => acc + e.duration, 0),
+    totalHours: filteredEntries.reduce((acc: number, e: any) => {
+      const d = new Date(e.date)
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6
+      const isHoliday = holidays.some((h: any) => h.date.split('T')[0] === e.date.split('T')[0])
+      
+      // Jangan hitung jam jika weekend atau tanggal merah
+      if (isWeekend || isHoliday) return acc
+      return acc + e.duration
+    }, 0),
     entriesCount: filteredEntries.length,
   }
 

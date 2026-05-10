@@ -9,6 +9,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Settings2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -21,6 +31,8 @@ export default function UsersPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<string | null>(null)
 
   // Forms
   const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'USER', telegramId: '' })
@@ -31,7 +43,9 @@ export default function UsersPage() {
   }, [])
 
   async function fetchUsers() {
+    console.log('[DEBUG-FE] Fetching users...');
     const response = await api.get('/user')
+    console.log('[DEBUG-FE] User API Response:', response);
     if (response.success) {
       setUsers(response.data)
     } else {
@@ -69,16 +83,23 @@ export default function UsersPage() {
   }
 
   // DELETE USER
-  async function handleDelete(id: string) {
-    if (confirm('Apakah Anda yakin ingin menghapus pengguna ini? Tindakan ini tidak bisa dibatalkan.')) {
-      const res = await api.delete(`/user/${id}`)
-      if (res.success) {
-        toast.success('Pengguna dihapus')
-        fetchUsers()
-      } else {
-        toast.error(res.message || 'Gagal menghapus pengguna')
-      }
+  async function handleDelete() {
+    if (!userToDelete) return
+    
+    const res = await api.delete(`/user/${userToDelete}`)
+    if (res.success) {
+      toast.success('Pengguna berhasil dihapus')
+      fetchUsers()
+    } else {
+      toast.error(res.message || 'Gagal menghapus pengguna')
     }
+    setDeleteOpen(false)
+    setUserToDelete(null)
+  }
+
+  function confirmDelete(id: string) {
+    setUserToDelete(id)
+    setDeleteOpen(true)
   }
 
   const openEditModal = (user: any) => {
@@ -180,7 +201,7 @@ export default function UsersPage() {
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => openEditModal(u)}>
                             <Settings2 className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => handleDelete(u.id)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" onClick={() => confirmDelete(u.id)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -320,6 +341,29 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="border-red-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Hapus Pengguna?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus pengguna ini? Semua data timesheet yang terkait mungkin akan terpengaruh. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer">Batal</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700 text-white border-none cursor-pointer"
+            >
+              Hapus Sekarang
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

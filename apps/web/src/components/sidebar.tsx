@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Clock, Settings, LogOut, User, Users } from 'lucide-react'
+import { LayoutDashboard, Clock, Settings, LogOut, User, Users, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -26,6 +26,7 @@ export function Sidebar() {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: Clock, label: 'Timesheet', href: '/timesheet' },
+    { icon: Calendar, label: 'Calendar', href: '/calendar' },
     ...(user?.role === 'ADMIN' ? [{ icon: Users, label: 'Users', href: '/users' }] : []),
     { icon: Settings, label: 'Settings', href: '/settings' },
   ]

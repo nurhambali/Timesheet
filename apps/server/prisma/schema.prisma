@@ -56,3 +56,12 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+
+model Holiday {
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  color     String   @default("#ef4444")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
