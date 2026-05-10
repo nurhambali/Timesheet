@@ -2,21 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, Briefcase, Calendar, TrendingUp, Plus, Trash2 } from 'lucide-react'
+import { Clock, Calendar, FileText, LayoutDashboard, Download, User as UserIcon } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { format } from 'date-fns'
 
 export default function DashboardPage() {
   const [allEntries, setAllEntries] = useState([])
   const [holidays, setHolidays] = useState<any[]>([])
-  const [selectedMonth, setSelectedMonth] = useState('') // Format YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState('') 
   const [availableMonths, setAvailableMonths] = useState<string[]>([])
+  const [showProject, setShowProject] = useState(false)
 
   const fetchEntries = async () => {
     const [timesheetRes, holidayRes] = await Promise.all([
@@ -24,15 +24,12 @@ export default function DashboardPage() {
       api.get('/holiday')
     ])
 
-    if (holidayRes.success) {
-      setHolidays(holidayRes.data)
-    }
+    if (holidayRes.success) setHolidays(holidayRes.data)
 
     if (timesheetRes.success) {
       const data = timesheetRes.data
       setAllEntries(data)
 
-      // Cari semua bulan unik dari data
       const months = new Set<string>()
       data.forEach((e: any) => {
         const d = new Date(e.date)
@@ -40,10 +37,9 @@ export default function DashboardPage() {
         months.add(yearMonth)
       })
       
-      const sortedMonths = Array.from(months).sort((a, b) => b.localeCompare(a)) // Terbaru di atas
+      const sortedMonths = Array.from(months).sort((a, b) => b.localeCompare(a))
       setAvailableMonths(sortedMonths)
       
-      // Default pilih bulan terbaru jika ada, kalau tidak biarkan kosong
       if (sortedMonths.length > 0 && !selectedMonth) {
         setSelectedMonth(sortedMonths[0])
       }
@@ -52,45 +48,31 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchEntries()
+    const saved = localStorage.getItem('showProjectField')
+    setShowProject(saved === 'true')
   }, [])
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus data ini?')) {
-      const response = await api.delete(`/timesheet/${id}`)
-      if (response.success) {
-        toast.success('Data dihapus')
-        fetchEntries()
-      }
-    }
-  }
-
-  // Filter Data
   const filteredEntries = allEntries.filter((e: any) => {
-    if (!selectedMonth) return true
+    if (!selectedMonth || selectedMonth === 'All') return true
     const d = new Date(e.date)
     const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     return yearMonth === selectedMonth
   })
 
-  // Hitung stats berdasarkan data yang terfilter
   const stats = {
     totalHours: filteredEntries.reduce((acc: number, e: any) => {
       const d = new Date(e.date)
       const isWeekend = d.getDay() === 0 || d.getDay() === 6
       const isHoliday = holidays.some((h: any) => h.date.split('T')[0] === e.date.split('T')[0])
-      
-      // Jangan hitung jam jika weekend atau tanggal merah
       if (isWeekend || isHoliday) return acc
       return acc + e.duration
     }, 0),
     entriesCount: filteredEntries.length,
   }
 
-  // Pagination Logic
   const [pageSize, setPageSize] = useState<number | 'All'>(30)
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Reset page when filter changes
   useEffect(() => {
     setCurrentPage(1)
   }, [selectedMonth, pageSize])
@@ -110,15 +92,15 @@ export default function DashboardPage() {
     const userName = userData ? JSON.parse(userData).name : 'User'
     const safeName = userName.replace(/\s+/g, '_')
 
-    let csvContent = 'Date,Start,End,Activity\n'
-
+    let csvContent = 'Date,Project,Start,End,Duration,Activity\n'
     filteredEntries.forEach((entry: any) => {
       const date = new Date(entry.date).toLocaleDateString('en-GB')
+      const project = `"${(entry.project || '').replace(/"/g, '""')}"`
       const start = entry.startTime || '-'
       const end = entry.endTime || '-'
+      const duration = entry.duration
       const activity = `"${entry.activity.replace(/"/g, '""')}"` 
-      
-      csvContent += `${date},${start},${end},${activity}\n`
+      csvContent += `${date},${project},${start},${end},${duration},${activity}\n`
     })
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -134,30 +116,33 @@ export default function DashboardPage() {
   }
 
   const formatMonthLabel = (ym: string) => {
-    if (!ym) return 'Semua Data'
+    if (!ym || ym === 'All') return 'Semua Data'
     const [y, m] = ym.split('-')
     const date = new Date(parseInt(y), parseInt(m) - 1, 1)
     return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
   }
 
   const cards = [
-    { title: 'Total Jam', value: `${stats.totalHours.toFixed(1)}h`, icon: Clock, color: 'text-blue-500' },
-    { title: 'Total Entry', value: stats.entriesCount, icon: Calendar, color: 'text-purple-500' },
+    { title: 'Total Jam Kerja', value: `${stats.totalHours.toFixed(1)}h`, description: 'Bulan terpilih (diluar weekend/libur)', icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { title: 'Total Aktivitas', value: stats.entriesCount, description: 'Jumlah baris data tercatat', icon: FileText, color: 'text-purple-600', bg: 'bg-purple-50' },
   ]
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-slate-500">Selamat datang kembali! Berikut ringkasan aktivitas Anda.</p>
+          <div className="flex items-center gap-2 mb-1">
+             <LayoutDashboard className="w-6 h-6 text-primary" />
+             <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          </div>
+          <p className="text-slate-500">Ringkasan aktivitas dan performa kerja Anda.</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <Label htmlFor="month-filter" className="text-slate-500 whitespace-nowrap">Filter Bulan:</Label>
-            <Select value={selectedMonth} onValueChange={(val) => setSelectedMonth(val || '')}>
-              <SelectTrigger className="w-[180px] bg-white hover:bg-slate-50 transition-colors">
+            <Label className="text-xs font-bold text-slate-500 uppercase">Periode:</Label>
+            <Select value={selectedMonth} onValueChange={(val) => setSelectedMonth(val || 'All')}>
+              <SelectTrigger className="w-[200px] h-10 bg-white">
                 <SelectValue placeholder="Semua Data" />
               </SelectTrigger>
               <SelectContent>
@@ -169,110 +154,105 @@ export default function DashboardPage() {
             </Select>
           </div>
 
-          <Button variant="outline" onClick={handleExportCSV} className="gap-2 text-slate-700 bg-white shadow-sm hover:bg-slate-100 transition-colors cursor-pointer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            Export CSV
+          <Button variant="outline" onClick={handleExportCSV} className="gap-2 bg-white shadow-sm hover:bg-slate-50 transition-all active:scale-95">
+            <Download className="w-4 h-4" /> Export CSV
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         {cards.map((card) => (
-          <Card key={card.title} className="shadow-sm border-slate-200/50">
+          <Card key={card.title} className="shadow-sm border-slate-200/50 overflow-hidden group hover:border-primary/30 transition-all">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
+              <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-wider">
                 {card.title}
               </CardTitle>
-              <card.icon className={`h-4 w-4 ${card.color}`} />
+              <div className={`p-2 rounded-lg ${card.bg} group-hover:scale-110 transition-transform`}>
+                <card.icon className={`h-4 w-4 ${card.color}`} />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{card.value}</div>
+              <div className="text-3xl font-bold">{card.value}</div>
+              <p className="text-[10px] text-slate-400 mt-1">{card.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Card className="shadow-sm border-slate-200/50">
-        <CardContent className="p-0 overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="pageSize" className="text-sm text-slate-500">Tampilkan:</Label>
-              <Select 
-                value={String(pageSize)} 
-                onValueChange={(val) => {
-                  if (!val) return
-                  setPageSize(val === 'All' ? 'All' : Number(val))
-                  setCurrentPage(1)
-                }}
-              >
-                <SelectTrigger className="w-[100px] h-8 text-xs bg-white">
-                  <SelectValue placeholder="Semua" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30">30</SelectItem>
-                  <SelectItem value="60">60</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                  <SelectItem value="All">Semua</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="text-sm text-slate-500">
-              Total: {filteredEntries.length} data
-            </div>
-          </div>
+      <Card className="shadow-sm border-slate-200/50 overflow-hidden">
+        <CardHeader className="bg-slate-50/50 border-b p-4">
+           <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-slate-400" /> Daftar Aktivitas Terkini
+              </CardTitle>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Label className="text-[10px] font-bold text-slate-400 uppercase">Limit:</Label>
+                  <Select 
+                    value={String(pageSize)} 
+                    onValueChange={(val) => {
+                      setPageSize(val === 'All' ? 'All' : Number(val))
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[80px] h-7 text-xs bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">30</SelectItem>
+                      <SelectItem value="60">60</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="All">Semua</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+           </div>
+        </CardHeader>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table className="border-collapse">
+            <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead rowSpan={2} className="w-[15%] font-semibold text-slate-700 text-center align-middle border-r">
-                    Date
-                  </TableHead>
-                  <TableHead colSpan={3} className="w-[30%] font-semibold text-slate-700 text-center border-b border-r">
-                    Working Hour
-                  </TableHead>
-                  <TableHead rowSpan={2} className="w-[15%] font-semibold text-slate-700 text-center align-middle border-r">
-                    Total Hour
-                  </TableHead>
-                  <TableHead rowSpan={2} className="w-[30%] font-semibold text-slate-700 text-center align-middle border-r">
-                    Activity / Remark
-                  </TableHead>
-                  <TableHead rowSpan={2} className="w-[10%] font-semibold text-slate-700 text-center align-middle">
-                    Action
-                  </TableHead>
-                </TableRow>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead className="w-[10%] font-semibold text-slate-700 text-center border-r">Start</TableHead>
-                  <TableHead className="w-[10%] font-semibold text-slate-700 text-center border-r">-</TableHead>
-                  <TableHead className="w-[10%] font-semibold text-slate-700 text-center border-r">End</TableHead>
+                <TableRow className="bg-slate-50/30 hover:bg-transparent">
+                  <TableHead className="w-[150px] font-bold text-slate-700">Tanggal</TableHead>
+                  {showProject && <TableHead className="w-[150px] font-bold text-slate-700">Project</TableHead>}
+                  <TableHead className="w-[180px] font-bold text-slate-700">Waktu</TableHead>
+                  <TableHead className="w-[100px] font-bold text-slate-700 text-center">Durasi</TableHead>
+                  <TableHead className="font-bold text-slate-700">Aktivitas / Keterangan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                      Belum ada data timesheet untuk bulan ini.
+                    <TableCell colSpan={showProject ? 5 : 4} className="text-center py-12 text-slate-400 italic">
+                      Tidak ada data aktivitas untuk periode ini.
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedEntries.map((entry: any) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="text-center border-r">{new Date(entry.date).toLocaleDateString('en-GB')}</TableCell>
-                      <TableCell className="text-center border-r">{entry.startTime || '-'}</TableCell>
-                      <TableCell className="text-center border-r text-slate-400">-</TableCell>
-                      <TableCell className="text-center border-r">{entry.endTime || '-'}</TableCell>
-                      <TableCell className="text-center border-r font-medium">{entry.duration}</TableCell>
-                      <TableCell className="text-center border-r">{entry.activity}</TableCell>
+                    <TableRow key={entry.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="font-medium">
+                        {format(new Date(entry.date), 'dd MMM yyyy')}
+                      </TableCell>
+                      {showProject && (
+                        <TableCell>
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded font-semibold">
+                            {entry.project || 'General'}
+                          </span>
+                        </TableCell>
+                      )}
+                      <TableCell className="text-slate-500 font-mono text-xs">
+                        {entry.startTime || '-'} — {entry.endTime || '-'}
+                      </TableCell>
                       <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-red-500 hover:text-red-600"
-                            onClick={() => handleDelete(entry.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold">
+                          {entry.duration}h
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <p className="line-clamp-2 text-slate-600 text-sm leading-relaxed">
+                          {entry.activity}
+                        </p>
                       </TableCell>
                     </TableRow>
                   ))
@@ -281,16 +261,16 @@ export default function DashboardPage() {
             </Table>
           </div>
 
-          {/* Pagination Controls */}
           {pageSize !== 'All' && totalPages > 1 && (
             <div className="flex items-center justify-between p-4 border-t bg-slate-50/50">
-              <p className="text-sm text-slate-500">
-                Halaman {currentPage} dari {totalPages}
+              <p className="text-xs text-slate-500 font-medium">
+                Menampilkan halaman {currentPage} dari {totalPages}
               </p>
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
                   size="sm" 
+                  className="h-8 text-xs"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
@@ -299,6 +279,7 @@ export default function DashboardPage() {
                 <Button 
                   variant="outline" 
                   size="sm" 
+                  className="h-8 text-xs"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
                 >

@@ -4,7 +4,7 @@ import { isAuthenticated } from '../middleware/auth'
 import ExcelJS from 'exceljs'
 import * as fs from 'fs'
 import path from 'path'
-import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns'
 
 const db = prisma as any
 
@@ -16,6 +16,15 @@ function colToNumber(col: string) {
     num = num * 26 + s.charCodeAt(i) - 64;
   }
   return num;
+}
+
+function smartReplace(cell: ExcelJS.Cell, newValue: string) {
+  const currentVal = cell.value?.toString() || ''
+  if (currentVal.includes('...')) {
+    cell.value = currentVal.replace(/\.{3,}/g, newValue)
+  } else {
+    cell.value = newValue
+  }
 }
 
 export const timesheetRoutes = (app: Elysia) => 
@@ -35,19 +44,18 @@ export const timesheetRoutes = (app: Elysia) =>
           const { month, clientId } = body
           const [yearStr, monthStr] = month.split('-')
           const year = parseInt(yearStr); const monthNum = parseInt(monthStr)
-          const startDate = startOfMonth(new Date(year, monthNum - 1))
-          const endDate = endOfMonth(new Date(year, monthNum - 1))
+          
+          const startDate = new Date(Date.UTC(year, monthNum - 1, 1))
+          const endDate = new Date(Date.UTC(year, monthNum, 0))
 
           const [entries, holidays] = await Promise.all([
             db.timesheet.findMany({ where: { userId: user!.id, date: { gte: startDate, lte: endDate } }, orderBy: { date: 'asc' } }),
             db.holiday.findMany({ where: { date: { gte: startDate, lte: endDate } } })
           ])
 
-          if (entries.length === 0) { set.status = 404; return { success: false, message: 'Data tidak ditemukan' } }
-
           const holidayMap: Record<string, string> = {}
           holidays.forEach((h: any) => {
-            const d = h.date instanceof Date ? h.date : new Date(h.date)
+            const d = new Date(h.date)
             const yStr = d.getUTCFullYear(); const mStr = String(d.getUTCMonth() + 1).padStart(2, '0'); const dStr = String(d.getUTCDate()).padStart(2, '0')
             holidayMap[`${yStr}-${mStr}-${dStr}`] = h.title
           })
@@ -72,12 +80,22 @@ export const timesheetRoutes = (app: Elysia) =>
           const worksheet = workbook.getWorksheet(1)
           if (!worksheet) throw new Error('Template bermasalah')
 
-          if (mapping.name) worksheet.getCell(mapping.name).value = user!.name
+          if (mapping.name) {
+            smartReplace(worksheet.getCell(mapping.name), user!.name)
+          }
+
+          const fmtDate = (d: Date) => {
+            const dd = String(d.getUTCDate()).padStart(2, '0')
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+            const yyyy = d.getUTCFullYear()
+            return `${mm}/${dd}/${yyyy}`
+          }
+
           if (mapping.startDateCell && mapping.endDateCell) {
-            worksheet.getCell(mapping.startDateCell).value = format(startDate, 'dd MMMM yyyy')
-            worksheet.getCell(mapping.endDateCell).value = format(endDate, 'dd MMMM yyyy')
+            smartReplace(worksheet.getCell(mapping.startDateCell), fmtDate(startDate))
+            smartReplace(worksheet.getCell(mapping.endDateCell), fmtDate(endDate))
           } else if (mapping.period) {
-            worksheet.getCell(mapping.period).value = `${format(startDate, 'dd MMMM yyyy')} s/d ${format(endDate, 'dd MMMM yyyy')}`
+            smartReplace(worksheet.getCell(mapping.period), `${fmtDate(startDate)} s/d ${fmtDate(endDate)}`)
           }
 
           const mappedCols = [mapping.dateCol, mapping.startCol, mapping.endCol, mapping.durationCol, mapping.activityCol].filter(Boolean)
@@ -85,46 +103,101 @@ export const timesheetRoutes = (app: Elysia) =>
           const startColNum = Math.min(...colNums, colToNumber('A'))
           const endColNum = Math.max(...colNums)
 
-          entries.forEach((entry: any, index: number) => {
-            const rowIdx = (Number(mapping.startRow) || 10) + index
-            const row = worksheet.getRow(rowIdx)
-            const rawDate = entry.date instanceof Date ? entry.date : new Date(entry.date)
-            const y = rawDate.getUTCFullYear(); const m = rawDate.getUTCMonth(); const d = rawDate.getUTCDate()
-            
-            const dayOfWeek = rawDate.getUTCDay()
-            const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-            const holidayName = holidayMap[dateStr]
+          // --- LOGIKA BARU: LOOP SEMUA HARI DALAM BULAN ---
+          const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate })
+          let currentRowIdx = Number(mapping.startRow) || 10
+
+          daysInMonth.forEach((dayDate) => {
+            const y = dayDate.getUTCFullYear(); const m = dayDate.getUTCMonth(); const d = dayDate.getUTCDate()
+            const dayOfWeek = dayDate.getUTCDay()
+            const dateKey = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            const holidayName = holidayMap[dateKey]
             const isSatSun = dayOfWeek === 0 || dayOfWeek === 6
             const isOffDay = isSatSun || !!holidayName
 
-            for (let c = startColNum; c <= endColNum; c++) {
-              const cell = row.getCell(c)
-              cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }
-              cell.alignment = { horizontal: 'center', vertical: 'middle' }
-              if (isOffDay) {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } }
-                cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }
-              } else {
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }
-                cell.font = { color: { argb: 'FF000000' }, bold: false }
+            // Cari semua aktivitas user di tanggal ini
+            const dayEntries = entries.filter((e: any) => {
+              const ed = new Date(e.date)
+              return ed.getUTCFullYear() === y && ed.getUTCMonth() === m && ed.getUTCDate() === d
+            })
+
+            // 1. TAMBAHKAN BARIS DASAR (WEEKEND/LIBUR/DATA KOSONG)
+            const addBaseRow = () => {
+              const row = worksheet.getRow(currentRowIdx)
+              
+              // Styling Merah jika Libur
+              for (let c = startColNum; c <= endColNum; c++) {
+                const cell = row.getCell(c)
+                if (cell.type !== ExcelJS.ValueType.Formula) {
+                  cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }
+                  cell.alignment = { horizontal: 'center', vertical: 'middle' }
+                }
+                if (isOffDay) {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } }
+                  cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }
+                }
               }
+
+              if (mapping.dateCol) {
+                const c = row.getCell(colToNumber(mapping.dateCol))
+                c.value = new Date(Date.UTC(y, m, d)); c.numFmt = 'mm/dd/yyyy'
+              }
+
+              if (isOffDay) {
+                if (mapping.startCol) row.getCell(colToNumber(mapping.startCol)).value = '-'
+                if (mapping.endCol) row.getCell(colToNumber(mapping.endCol)).value = '-'
+                if (mapping.durationCol) {
+                  const cell = row.getCell(colToNumber(mapping.durationCol))
+                  if (cell.type !== ExcelJS.ValueType.Formula) cell.value = 0
+                }
+                if (mapping.activityCol) row.getCell(colToNumber(mapping.activityCol)).value = holidayName ? holidayName.toUpperCase() : 'WEEKEND'
+              }
+              
+              currentRowIdx++
             }
 
-            if (mapping.dateCol) {
-              const c = row.getCell(colToNumber(mapping.dateCol))
-              c.value = new Date(y, m, d); c.numFmt = 'mm/dd/yyyy'
+            // Jika hari ini libur, tambahkan baris keterangan liburnya dulu
+            if (isOffDay) {
+              addBaseRow()
+            } else if (dayEntries.length === 0) {
+              // Jika hari kerja tapi tidak ada data, tambahkan baris kosong (opsional, tapi biasanya timesheet butuh semua tanggal)
+              addBaseRow()
             }
-            
-            const autoText = holidayName ? holidayName.toUpperCase() : 'WEEKEND'
-            const actVal = isOffDay ? autoText : entry.activity
 
-            if (mapping.startCol) row.getCell(colToNumber(mapping.startCol)).value = isOffDay ? '-' : entry.startTime
-            if (mapping.endCol) row.getCell(colToNumber(mapping.endCol)).value = isOffDay ? '-' : entry.endTime
-            if (mapping.durationCol) row.getCell(colToNumber(mapping.durationCol)).value = isOffDay ? 0 : entry.duration
-            if (mapping.activityCol) row.getCell(colToNumber(mapping.activityCol)).value = actVal
+            // 2. TAMBAHKAN BARIS AKTIVITAS USER (LEMBUR ATAU KERJA BIASA)
+            dayEntries.forEach((entry: any) => {
+              const row = worksheet.getRow(currentRowIdx)
+              
+              for (let c = startColNum; c <= endColNum; c++) {
+                const cell = row.getCell(c)
+                if (cell.type !== ExcelJS.ValueType.Formula) {
+                  cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }
+                  cell.alignment = { horizontal: 'center', vertical: 'middle' }
+                }
+                // Tetap Merah jika hari ini Libur/Weekend
+                if (isOffDay) {
+                  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' } }
+                  cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }
+                }
+              }
+
+              if (mapping.dateCol) {
+                const c = row.getCell(colToNumber(mapping.dateCol))
+                c.value = new Date(Date.UTC(y, m, d)); c.numFmt = 'mm/dd/yyyy'
+              }
+
+              if (mapping.startCol) row.getCell(colToNumber(mapping.startCol)).value = entry.startTime
+              if (mapping.endCol) row.getCell(colToNumber(mapping.endCol)).value = entry.endTime
+              if (mapping.durationCol) {
+                const cell = row.getCell(colToNumber(mapping.durationCol))
+                if (cell.type !== ExcelJS.ValueType.Formula) cell.value = entry.duration
+              }
+              if (mapping.activityCol) row.getCell(colToNumber(mapping.activityCol)).value = entry.activity
+
+              currentRowIdx++
+            })
           })
 
-          worksheet.eachRow((row) => { row.eachCell((cell) => { if (cell.type === ExcelJS.ValueType.Formula) { cell.value = cell.result } }) })
           const buffer = await workbook.xlsx.writeBuffer()
           set.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           set.headers['Content-Disposition'] = `attachment; filename="Timesheet_${month}.xlsx"`

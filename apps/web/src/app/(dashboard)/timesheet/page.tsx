@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { Plus, Download, Trash2, Calendar as CalendarIcon, FileSpreadsheet, Pencil, X, Save, Clock, FileText } from 'lucide-react'
+import { Plus, Download, Trash2, Calendar as CalendarIcon, FileSpreadsheet, Pencil, X, Save, Clock, FileText, Sparkles } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, differenceInMinutes, parse } from 'date-fns'
 import {
   Dialog,
@@ -175,7 +175,6 @@ export default function TimesheetPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Pilih Template</Label>
-                  {/* FIX: Gunakan wrapper untuk onValueChange agar sesuai tipe data Base UI */}
                   <Select value={selectedTemplateId} onValueChange={(val) => setSelectedTemplateId(val || '')}>
                     <SelectTrigger><SelectValue placeholder="Pilih Template" /></SelectTrigger>
                     <SelectContent>
@@ -209,8 +208,20 @@ export default function TimesheetPage() {
                     <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required />
                   </div>
                   <div className="space-y-2">
-                    <Label>Durasi (Jam)</Label>
-                    <Input type="number" step="0.1" value={formData.duration} onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value)})} required />
+                    <div className="flex items-center gap-1.5">
+                      <Label>Durasi (Jam)</Label>
+                      <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-bold animate-pulse">
+                        <Sparkles className="w-2.5 h-2.5" /> AUTO
+                      </span>
+                    </div>
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      value={formData.duration} 
+                      readOnly 
+                      className="bg-slate-50 font-bold text-blue-600 border-blue-100 cursor-not-allowed" 
+                      required 
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -303,8 +314,20 @@ export default function TimesheetPage() {
                 <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} required />
               </div>
               <div className="space-y-2">
-                <Label>Durasi (Jam)</Label>
-                <Input type="number" step="0.1" value={formData.duration} onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value)})} required />
+                <div className="flex items-center gap-1.5">
+                  <Label>Durasi (Jam)</Label>
+                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-bold animate-pulse">
+                    <Sparkles className="w-2.5 h-2.5" /> AUTO
+                  </span>
+                </div>
+                <Input 
+                  type="number" 
+                  step="0.1" 
+                  value={formData.duration} 
+                  readOnly 
+                  className="bg-slate-50 font-bold text-blue-600 border-blue-100 cursor-not-allowed" 
+                  required 
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
