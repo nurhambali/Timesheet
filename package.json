@@ -3,8 +3,14 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"server,web\" -c \"blue,green\" \"bun run --cwd apps/server dev\" \"bun run --cwd apps/web dev\"",
+    "server": "bun run --cwd apps/server dev",
+    "web": "bun run --cwd apps/web dev"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "concurrently": "^9.2.1"
   },
   "peerDependencies": {
     "typescript": "^5"

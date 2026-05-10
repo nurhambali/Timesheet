@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "@elysiajs/cookie": "^0.8.0",
+    "@elysiajs/cors": "^1.4.2",
     "@elysiajs/jwt": "^1.4.2",
     "@prisma/client": "6",
     "elysia": "latest",

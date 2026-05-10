@@ -56,7 +56,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   )
   .post(
     '/login',
-    async ({ body, jwt, setCookie, set }) => {
+    async ({ body, jwt, cookie: { auth }, set }) => {
       const { email, password } = body
 
       const user = await prisma.user.findUnique({
@@ -82,7 +82,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         role: user.role,
       })
 
-      setCookie('auth', token, {
+      auth.set({
+        value: token,
         httpOnly: true,
         maxAge: 7 * 86400, // 1 week
         path: '/',

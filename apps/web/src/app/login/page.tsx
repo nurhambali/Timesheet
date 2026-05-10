@@ -38,23 +38,18 @@ export default function LoginPage() {
         localStorage.setItem('auth_token', response.data.token)
         localStorage.setItem('user', JSON.stringify(response.data.user))
         
-        toast({
-          title: 'Login Berhasil',
+        toast.success('Login Berhasil', {
           description: `Selamat datang kembali, ${response.data.user.name}!`,
         })
         
         router.push('/dashboard')
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'Login Gagal',
+        toast.error('Login Gagal', {
           description: response.message || 'Email atau password salah',
         })
       }
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
+      toast.error('Error', {
         description: 'Terjadi kesalahan sistem. Silakan coba lagi.',
       })
     } finally {
