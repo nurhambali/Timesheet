@@ -120,9 +120,9 @@ model User {
   id            String      @id @default(cuid())
   email         String      @unique
   name          String
-  password      String      // Hashed
-  telegramId    String?     @unique  // ID Telegram user
-  telegramToken String?     @unique  // Token unik untuk link Telegram
+  password      String
+  telegramId    String?     @unique
+  telegramToken String?     @unique
   role          Role        @default(USER)
   timesheets    Timesheet[]
   createdAt     DateTime    @default(now())
@@ -134,15 +134,23 @@ model Timesheet {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   date        DateTime
-  project     String
+  startTime   String?  // Format HH:mm
+  endTime     String?  // Format HH:mm
   activity    String
-  duration    Float    // Dalam jam (contoh: 1.5 = 1 jam 30 menit)
+  duration    Float    // Dalam jam
   note        String?
-  source      Source   @default(WEB)  // Dari mana input dibuat
+  source      Source   @default(WEB)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([userId, date])
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  title     String
+  createdAt DateTime @default(now())
 }
 
 enum Role {
@@ -294,11 +302,17 @@ GET    /timesheet/summary   → Ringkasan jam kerja
 **Telegram Commands yang didukung:**
 ```
 /start TOKEN        → Link akun (satu kali)
-/log 2h Meeting     → Catat 2 jam meeting (project default)
-/log 1.5h Coding ProjectX → Catat 1.5 jam coding di ProjectX
+/log 2h Meeting     → Catat 2 jam meeting
 /today              → Lihat timesheet hari ini
 /summary            → Ringkasan minggu ini
 /help               → Panduan penggunaan
+
+**Fitur Tambahan Terimplementasi:**
+- **FullCalendar View**: Visualisasi jadwal interaktif dengan warna khusus Weekend & Libur.
+- **Admin Holiday Manager**: Panel khusus admin untuk kelola tanggal merah & Bulk Import CSV.
+- **Smart Export CSV**: Laporan otomatis mengisi baris 24 jam untuk libur/weekend.
+- **RTK Proxy**: Optimasi output terminal untuk pengembang.
+- **Docker Multi-Env**: Mendukung Postgres & SQLite via Docker Compose.
 ```
 
 **Contoh format parsing `/log`:**
@@ -350,12 +364,12 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 
 ## ✅ Checklist Progress
 
-- [ ] **Phase 1:** Setup project (Bun, Elysia, Next.js, Prisma, shadcn)
-- [ ] **Phase 2:** Auth & User API
-- [ ] **Phase 3:** Timesheet CRUD API
-- [ ] **Phase 4:** Frontend Dashboard
-- [ ] **Phase 5:** Integrasi Telegram
-- [ ] **Phase 6:** Polish & Deploy
+- [x] **Phase 1:** Setup project (Bun, Elysia, Next.js, Prisma, shadcn)
+- [x] **Phase 2:** Auth & User API
+- [x] **Phase 3:** Timesheet CRUD API
+- [x] **Phase 4:** Frontend Dashboard & Calendar
+- [ ] **Phase 5:** Integrasi Telegram (In Progress)
+- [x] **Phase 6:** Polish & Deploy (Docker & Postgres Ready)
 
 ---
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Clock, CalendarIcon, Download } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, CalendarIcon, Download, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -59,6 +59,7 @@ export default function TimesheetPage() {
   const [entryToDelete, setEntryToDelete] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const fetchEntries = async () => {
     const response = await api.get('/timesheet')
@@ -273,11 +274,21 @@ export default function TimesheetPage() {
     return yearMonth === selectedMonth
   })
 
+  const sortedEntries = [...filteredEntries].sort((a: any, b: any) => {
+    const dateA = new Date(a.date).getTime()
+    const dateB = new Date(b.date).getTime()
+    return sortOrder === 'asc' ? dateA - dateB : dateB - dateA
+  })
+
   const paginatedEntries = pageSize === 'All' 
-    ? filteredEntries 
-    : filteredEntries.slice((currentPage - 1) * (pageSize as number), currentPage * (pageSize as number))
+    ? sortedEntries 
+    : sortedEntries.slice((currentPage - 1) * (pageSize as number), currentPage * (pageSize as number))
 
   const totalPages = pageSize === 'All' ? 1 : Math.ceil(filteredEntries.length / (pageSize as number))
+
+  const toggleSort = () => {
+    setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+  }
 
   return (
     <div className="space-y-6">
@@ -379,7 +390,15 @@ export default function TimesheetPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px] text-center border-r"><Checkbox checked={selectedIds.length === paginatedEntries.length && paginatedEntries.length > 0} onCheckedChange={(c) => toggleSelectAll(!!c)} /></TableHead>
-                  <TableHead className="text-center border-r">Date</TableHead>
+                  <TableHead 
+                    className="text-center border-r cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={toggleSort}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Date
+                      {sortOrder === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                  </TableHead>
                   <TableHead className="text-center border-r">Start</TableHead>
                   <TableHead className="text-center border-r">End</TableHead>
                   <TableHead className="text-center border-r">Hours</TableHead>

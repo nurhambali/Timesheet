@@ -14,11 +14,11 @@ export default function ProfilePage() {
     name: '',
     email: '',
     telegramId: '',
+    telegramUsername: '',
     password: '',
   })
 
   useEffect(() => {
-    // 1. Muat data dari localStorage agar tampil instan
     const localData = localStorage.getItem('user')
     if (localData) {
       const parsed = JSON.parse(localData)
@@ -27,10 +27,9 @@ export default function ProfilePage() {
         name: parsed.name || '',
         email: parsed.email || '',
         telegramId: parsed.telegramId || '',
+        telegramUsername: parsed.telegramUsername || '',
       }))
     }
-    
-    // 2. Tarik data terbaru dari server
     fetchProfile()
   }, [])
 
@@ -41,7 +40,8 @@ export default function ProfilePage() {
         name: res.data.name || '',
         email: res.data.email || '',
         telegramId: res.data.telegramId || '',
-        password: '', // Jangan isi password demi keamanan
+        telegramUsername: res.data.telegramUsername || '',
+        password: '',
       })
     }
   }
@@ -115,15 +115,18 @@ export default function ProfilePage() {
             <hr className="my-4" />
             
             <div className="grid gap-2">
-              <Label htmlFor="telegram">Telegram Username (Integrasi Bot)</Label>
+              <Label htmlFor="telegram">Telegram (Integrasi Bot)</Label>
               <Input 
                 id="telegram" 
-                placeholder="Contoh: hambali_dev (tanpa @)" 
-                value={profile.telegramId} 
-                onChange={e => setProfile({...profile, telegramId: e.target.value})} 
+                placeholder="Belum tertaut" 
+                value={profile.telegramUsername || profile.telegramId || ''} 
+                disabled
+                className="bg-slate-50"
               />
               <p className="text-xs text-slate-500">
-                Isi Username Telegram Anda di sini agar bot bisa mengenali Anda saat Anda mencatat timesheet via chat.
+                {profile.telegramId 
+                  ? "✅ Akun Anda sudah tertaut dengan bot Telegram." 
+                  : "❌ Akun belum tertaut. Silakan buka halaman Settings untuk menautkan akun."}
               </p>
             </div>
 

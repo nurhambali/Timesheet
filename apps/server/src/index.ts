@@ -9,6 +9,8 @@ import { holidayRoutes } from "./routes/holiday";
 
 import { startBot } from "./lib/bot";
 
+const port = process.env.PORT || 4000;
+
 const app = new Elysia()
   .use(cors())
   .use(
@@ -23,7 +25,7 @@ const app = new Elysia()
   .use(timesheetRoutes)
   .use(settingsRoutes)
   .use(holidayRoutes)
-  .listen(3000);
+  .listen(port);
 
 console.log(
   `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
@@ -31,3 +33,14 @@ console.log(
 
 // Start Telegram Bot
 startBot();
+
+// Graceful shutdown
+const handleExit = async () => {
+  console.log('\n🛑 Shutting down server...');
+  const { stopBot } = await import("./lib/bot");
+  await stopBot();
+  process.exit(0);
+};
+
+process.on('SIGINT', handleExit);
+process.on('SIGTERM', handleExit);

@@ -14,7 +14,8 @@ model User {
   email         String      @unique
   name          String
   password      String      // Hashed
-  telegramId    String?     @unique  // ID Telegram user
+  telegramId    String?     @unique  // ID Telegram user (Numeric)
+  telegramUsername String?  @unique  // Username Telegram user (@username)
   telegramToken String?     @unique  // Token unik untuk link Telegram
   role          Role        @default(USER)
   timesheets    Timesheet[]

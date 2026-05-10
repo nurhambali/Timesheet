@@ -106,23 +106,26 @@ export default function DashboardPage() {
       return
     }
 
-    let csvContent = 'Date,Start,End,Total Hour,Activity / Remark\n'
+    const userData = localStorage.getItem('user')
+    const userName = userData ? JSON.parse(userData).name : 'User'
+    const safeName = userName.replace(/\s+/g, '_')
+
+    let csvContent = 'Date,Start,End,Activity\n'
 
     filteredEntries.forEach((entry: any) => {
       const date = new Date(entry.date).toLocaleDateString('en-GB')
       const start = entry.startTime || '-'
       const end = entry.endTime || '-'
-      const duration = entry.duration
       const activity = `"${entry.activity.replace(/"/g, '""')}"` 
       
-      csvContent += `${date},${start},${end},${duration},${activity}\n`
+      csvContent += `${date},${start},${end},${activity}\n`
     })
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `Timesheet_Report_${selectedMonth || 'All'}.csv`)
+    link.setAttribute('download', `Timesheet_${safeName}_${selectedMonth || 'All'}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()

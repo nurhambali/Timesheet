@@ -24,13 +24,41 @@ export const userRoutes = new Elysia({ prefix: '/user' })
 
     const user = await prisma.user.findUnique({
       where: { id: String(payload.id) },
-      select: { id: true, email: true, name: true, role: true }
+      select: { id: true, email: true, name: true, role: true, telegramId: true, telegramUsername: true }
     })
 
     return { user }
   })
   .get('/me', ({ user }) => {
     return { success: true, data: user }
+  })
+  .get('/telegram-token', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401
+      return { success: false, message: 'Unauthorized' }
+    }
+
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { telegramToken: true, telegramId: true }
+    })
+
+    return { success: true, data: userData }
+  })
+  .post('/telegram-token', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401
+      return { success: false, message: 'Unauthorized' }
+    }
+
+    const token = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { telegramToken: token }
+    })
+
+    return { success: true, data: { telegramToken: updated.telegramToken } }
   })
   .get('/', async ({ user, set }) => {
     if (!user) {
@@ -58,9 +86,17 @@ export const userRoutes = new Elysia({ prefix: '/user' })
     return { success: true, data: users }
   })
   .patch('/:id', async ({ user, set, params, body }) => {
-    if (!user || String(user.role).toUpperCase() !== 'ADMIN') {
+    if (!user) {
+      set.status = 401
+      return { success: false, message: 'Unauthorized' }
+    }
+
+    const targetId = params.id === 'me' ? user.id : params.id
+
+    // Hanya Admin yang bisa edit orang lain, user biasa hanya bisa edit diri sendiri
+    if (String(user.role).toUpperCase() !== 'ADMIN' && user.id !== targetId) {
       set.status = 403
-      return { success: false, message: 'Forbidden' }
+      return { success: false, message: 'Forbidden: You can only update your own profile' }
     }
 
     const { telegramId, role, name, email } = body as any
@@ -69,12 +105,14 @@ export const userRoutes = new Elysia({ prefix: '/user' })
     if (telegramId !== undefined) {
       updateData.telegramId = telegramId && telegramId.trim() !== '' ? telegramId.replace('@', '').trim() : null
     }
-    if (role) updateData.role = role
+    if (role && String(user.role).toUpperCase() === 'ADMIN') {
+      updateData.role = role
+    }
     if (name) updateData.name = name
     if (email) updateData.email = email
 
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id: targetId },
       data: updateData,
     })
 

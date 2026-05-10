@@ -1,11 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    turbopack: {
-      root: "../../",
-    },
-  },
+  /* Konfigurasi Next.js Anda di sini */
 };
 
 export default nextConfig;
