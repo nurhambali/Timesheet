@@ -8,9 +8,9 @@
   "dependencies": {
     "@elysiajs/cookie": "^0.8.0",
     "@elysiajs/jwt": "^1.4.2",
-    "@prisma/client": "^7.8.0",
+    "@prisma/client": "6",
     "elysia": "latest",
-    "prisma": "^7.8.0"
+    "prisma": "6"
   },
   "devDependencies": {
     "bun-types": "latest"
